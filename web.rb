@@ -62,19 +62,20 @@ post '/sessions/?' do
 
   error('This combination of username and password cannot be found.') unless db_password == password
 
-
   ###
   # Remove old sessions
   ###
   remove_old_sessions(session_uri)
 
-
   ###
   # Insert new session
   ###
+  roles_result = select_roles(account[:uri])
+  #error('roles not found', 400) if roles_result.empty?
+  roles = roles_result.map { |r| r[:role].to_s }
 
   session_id = generate_uuid()
-  insert_new_session_for_account(account[:uri].to_s, session_uri, session_id)
+  insert_new_session_for_account(account[:uri].to_s, session_uri, session_id, roles)
   update_modified(session_uri)
   status 201
   headers['mu-auth-allowed-groups'] = 'CLEAR'

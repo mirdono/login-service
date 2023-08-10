@@ -14,7 +14,7 @@ module LoginService
       query += "        <#{MU_ACCOUNT.status}> <#{MU_ACCOUNT['status/active']}> ; "
       query += "        <#{MU_ACCOUNT.password}> ?password ; "
       query += "        <#{MU_ACCOUNT.salt}> ?salt ; "
-      query += "        <#{MU_CORE.uuid}> ?uuid"
+      query += "        <#{MU_CORE.uuid}> ?uuid . "
       query += "   }"
       query += " }"
       Mu::AuthSudo.query(query)
@@ -24,23 +24,28 @@ module LoginService
       query =  " DELETE {"
       query += "   GRAPH <#{SESSIONS_GRAPH}> {"
       query += "     <#{session}> <#{MU_SESSION.account}> ?account ;"
-      query += "                <#{MU_CORE.uuid}> ?id . "
+      query += "                  <#{MU_CORE.uuid}> ?id ; "
+      query += "                  <#{MU_EXT.sessionRole}> ?role . "
       query += "   }"
       query += " }"
       query += " WHERE {"
       query += "   GRAPH <#{SESSIONS_GRAPH}> {"
       query += "     <#{session}> <#{MU_SESSION.account}> ?account ;"
-      query += "                <#{MU_CORE.uuid}> ?id . "
+      query += "                  <#{MU_CORE.uuid}> ?id . "
+      query += "     OPTIONAL { <#{session}> <#{MU_EXT.sessionRole}> ?role . } "
       query += "   }"
       query += " }"
       Mu::AuthSudo.update(query)
     end
 
-    def insert_new_session_for_account(account, session_uri, session_id)
+    def insert_new_session_for_account(account, session_uri, session_id, roles)
       query =  " INSERT DATA {"
       query += "   GRAPH <#{SESSIONS_GRAPH}> {"
       query += "     <#{session_uri}> <#{MU_SESSION.account}> <#{account}> ;"
       query += "                      <#{MU_CORE.uuid}> #{session_id.sparql_escape} ."
+      roles.each do |role|
+        query += "   <#{session_uri}> <#{MU_EXT.sessionRole}> #{role.sparql_escape} ."
+      end
       query += "   }"
       query += " }"
       Mu::AuthSudo.update(query)
@@ -73,13 +78,15 @@ module LoginService
       query = " DELETE {"
       query += "   GRAPH <#{SESSIONS_GRAPH}> {"
       query += "     ?session <#{MU_SESSION.account}> <#{account}> ;"
-      query += "              <#{MU_CORE.uuid}> ?id . "
+      query += "              <#{MU_CORE.uuid}> ?id ; "
+      query += "              <#{MU_EXT.sessionRole}> ?role . "
       query += "   }"
       query += " }"
       query += " WHERE {"
       query += "   GRAPH <#{SESSIONS_GRAPH}> {"
       query += "     ?session <#{MU_SESSION.account}> <#{account}> ;"
       query += "              <#{MU_CORE.uuid}> ?id . "
+      query += "     OPTIONAL { ?session <#{MU_EXT.sessionRole}> ?role . } "
       query += "   }"
       query += " }"
       Mu::AuthSudo.update(query)
@@ -106,5 +113,14 @@ module LoginService
       Mu::AuthSudo.update(query)
     end
 
+    def select_roles(account_id)
+      query =  " SELECT ?role WHERE {"
+      query += "   GRAPH <#{USERS_GRAPH}> {"
+      query += "     <#{account_id}> a <#{RDF::Vocab::FOAF.OnlineAccount}> ;"
+      query += "                     <#{MU_EXT.role}> ?role ."
+      query += "   }"
+      query += " }"
+      Mu::AuthSudo.query(query)
+    end
   end
 end
