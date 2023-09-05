@@ -43,7 +43,7 @@ post '/sessions/?' do
   attributes = data['attributes']
 
   validate_resource_type('sessions', data)
-  error('Id paramater is not allowed', 403) if not data['id'].nil?
+  error('Id parameter is not allowed', 403) if not data['id'].nil?
 
   error('Nickname is required') if attributes['nickname'].nil?
   error('Password is required') if attributes['password'].nil?
@@ -54,13 +54,26 @@ post '/sessions/?' do
 
   result = select_salted_password_and_salt_by_nickname(attributes['nickname'])
 
-  error('This combination of username and password cannot be found.') if result.empty?
+  if result.empty?
+    result = select_inactive_account_by_nickname(attributes['nickname'])
 
-  account = result.first
-  db_password = BCrypt::Password.new account[:password].to_s
-  password = attributes['password'] + settings.salt + account[:salt].to_s
+    if result.empty?
+      error('This combination of username and password cannot be found.')
+    else
+      # activate account
+      account = result.first
+      account_salt = SecureRandom.hex
+      hashed_password = BCrypt::Password.create attributes['password'] + settings.salt + account_salt
+      update_account_with_password(account[:uri], hashed_password, account_salt, account['nickname'])
+      activate_account(account[:uri])
+    end
+  else
+    account = result.first
+    db_password = BCrypt::Password.new account[:password].to_s
+    password = attributes['password'] + settings.salt + account[:salt].to_s
 
-  error('This combination of username and password cannot be found.') unless db_password == password
+    error('This combination of username and password cannot be found.') unless db_password == password
+  end
 
   ###
   # Remove old sessions

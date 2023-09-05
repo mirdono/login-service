@@ -20,6 +20,64 @@ module LoginService
       Mu::AuthSudo.query(query)
     end
 
+    def select_inactive_account_by_nickname(nickname)
+      query =  " SELECT ?uuid ?uri WHERE {"
+      query += "   GRAPH <#{USERS_GRAPH}> {"
+      query += "     ?uri a <#{RDF::Vocab::FOAF.OnlineAccount}> ; "
+      query += "        <#{RDF::Vocab::FOAF.accountName}> #{nickname.downcase.sparql_escape} ; "
+      query += "        <#{MU_ACCOUNT.status}> <#{MU_ACCOUNT['status/inactive']}> ; "
+      query += "        <#{MU_CORE.uuid}> ?uuid . "
+      query += "     FILTER NOT EXISTS {?uri <#{MU_ACCOUNT.password}> ?password}"
+      query += "   }"
+      query += " }"
+      Mu::AuthSudo.query(query)
+    end
+
+    # Adapted from registration service
+    def update_account_with_password(account_uri, hashed_password, account_salt, nickname)
+      # Insert new password and salt
+      now = DateTime.now
+      query =  " INSERT DATA {"
+      query += "   GRAPH <#{USERS_GRAPH}> {"
+      query += "     <#{account_uri}> "
+      unless hashed_password.nil? or account_salt.nil?
+        query += "                    <#{MU_ACCOUNT.password}> #{hashed_password.sparql_escape} ;"
+        query += "                    <#{MU_ACCOUNT.salt}> #{account_salt.sparql_escape} ;"
+      end
+      unless nickname.nil?
+        query += "                    <#{RDF::Vocab::FOAF.accountName}> #{nickname.downcase.sparql_escape} ;"
+      end
+      query += "                      <#{RDF::Vocab::DC.modified}> #{now.sparql_escape} ."
+      query += "   }"
+      query += " }"
+      Mu::AuthSudo.update(query)
+    end
+
+    # Adapted from registration service
+    def activate_account(account_uri)
+      # Delete old status
+      query =  " WITH <#{USERS_GRAPH}> "
+      query += " DELETE {"
+      query += "   <#{account_uri}> <#{MU_ACCOUNT.status}> ?status ;"
+      query += "                    <#{RDF::Vocab::DC.modified}> ?modified ."
+      query += " }"
+      query += " WHERE {"
+      query += "   <#{account_uri}> <#{MU_ACCOUNT.status}> ?status ;"
+      query += "                    <#{RDF::Vocab::DC.modified}> ?modified ."
+      query += " }"
+      Mu::AuthSudo.update(query)
+
+      # Set new active status
+      now = DateTime.now
+      query =  " INSERT DATA {"
+      query += "   GRAPH <#{USERS_GRAPH}> {"
+      query += "     <#{account_uri}> <#{MU_ACCOUNT.status}> <#{MU_ACCOUNT['status/active']}> ;"
+      query += "                      <#{RDF::Vocab::DC.modified}> #{now.sparql_escape} ."
+      query += "   }"
+      query += " }"
+      Mu::AuthSudo.update(query)
+    end
+
     def remove_old_sessions(session)
       query =  " DELETE {"
       query += "   GRAPH <#{SESSIONS_GRAPH}> {"
